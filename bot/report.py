@@ -16,6 +16,11 @@ def _overall(results: list[ClaimResult]) -> str:
         return "La notizia appare attendibile: tutti i claim verificati risultano veri."
     if unv_n == len(results):
         return "Non è stato possibile verificare i claim: nessuna evidenza sufficiente."
+    if false_n == 0 and true_n > len(results) / 2:
+        return (
+            f"La notizia appare sostanzialmente confermata: {true_n} claim su "
+            f"{len(results)} verificati veri, nessuno falso."
+        )
     return (
         f"Quadro misto — veri: {true_n}, falsi: {false_n}, "
         f"non verificabili: {unv_n}. Valutare con attenzione."

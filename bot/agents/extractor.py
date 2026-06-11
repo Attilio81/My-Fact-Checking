@@ -19,6 +19,10 @@ Estrai le affermazioni fattuali verificabili (claim), seguendo queste regole:
   "il progetto", "la vicenda" — sempre il riferimento completo ("l'indagine sul
   Ponte sullo Stretto di Messina"). Un claim letto da solo, senza il testo
   originale, deve identificare senza ambiguità di cosa parla.
+  SBAGLIATO: "Gli indagati avrebbero avvicinato un giudice contabile."
+  GIUSTO: "Gli indagati dell'inchiesta sul Ponte sullo Stretto avrebbero
+  avvicinato un giudice della Corte dei Conti."
+  Ogni claim DEVE contenere almeno un nome proprio (persona, ente, luogo, opera).
 - Solo claim CHECK-WORTHY: fatti oggettivi verificabili con fonti (numeri, eventi,
   dichiarazioni attribuite, dati). Escludi opinioni, previsioni, giudizi di valore.
 - PRESERVA IL CONTESTO geografico e temporale: se dal testo si deduce il paese

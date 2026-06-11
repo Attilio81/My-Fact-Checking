@@ -14,6 +14,16 @@ def test_format_report_per_claim():
     assert "https://a.it/x" in report
 
 
+def test_overall_mostly_true_no_false():
+    results = [
+        ClaimResult(claim=c, verdict="true", confidence="high", sources=["https://x.it"], reasoning="")
+        for c in "ABCD"
+    ] + [ClaimResult(claim="E", verdict="unverifiable", confidence="low", sources=[], reasoning="")]
+    report = format_report("T", results)
+    assert "sostanzialmente confermata" in report
+    assert "4 claim su 5" in report
+
+
 def test_overall_judgment_mostly_false():
     results = [
         ClaimResult(claim=c, verdict="false", confidence="high", sources=["https://x.it"], reasoning="")
