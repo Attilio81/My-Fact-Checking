@@ -85,8 +85,10 @@ async def _tavily_search(
         return []
 
 
-async def _factcheck_search(claim: str) -> list[Evidence]:
-    """Tier 0: Google Fact Check Tools API (ClaimReview). Skip se key assente."""
+async def _factcheck_search(query: str) -> list[Evidence]:
+    """Tier 0: Google Fact Check Tools API (ClaimReview). Skip se key assente.
+    Nessun filtro lingua: la copertura italiana è scarsa, i fact-check
+    internazionali (AFP, Reuters, Snopes) sono quasi tutti in inglese."""
     key = get_settings().GOOGLE_FACTCHECK_API_KEY
     if key is None:
         return []
@@ -94,7 +96,7 @@ async def _factcheck_search(claim: str) -> list[Evidence]:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 _FACTCHECK_URL,
-                params={"query": claim, "languageCode": "it", "key": key.get_secret_value()},
+                params={"query": query, "key": key.get_secret_value()},
             )
             resp.raise_for_status()
         evidences = []
@@ -139,9 +141,18 @@ async def gather_evidence(claim: str, registry: SourceRegistry) -> list[Evidence
     """Ordine spec: FactCheck API (tier 0) → Tavily domini fidati → Tavily aperto.
     Query mirate generate da un agente (incluso inglese per claim internazionali).
     Blacklist sempre esclusa. raw_content Tavily, Firecrawl come rinforzo."""
-    evidences = await _factcheck_search(claim)
-
     sq = await _generate_queries(claim)
+
+    evidences: list[Evidence] = []
+    fc_seen: set[str] = set()
+    for q in [claim, *sq.queries]:
+        for ev in await _factcheck_search(q):
+            if ev.url and ev.url not in fc_seen:
+                fc_seen.add(ev.url)
+                evidences.append(ev)
+        if evidences:
+            break  # primo match tier 0 basta, niente chiamate ridondanti
+
     results: list[dict] = []
     for q in sq.queries:
         results += await _tavily_search(q, registry.trusted_domains(), news=sq.is_current)
