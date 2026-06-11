@@ -17,8 +17,8 @@ def _overall(results: list[ClaimResult]) -> str:
     if unv_n == len(results):
         return "Non è stato possibile verificare i claim: nessuna evidenza sufficiente."
     return (
-        f"Quadro misto: {true_n} claim veri, {false_n} falsi, "
-        f"{unv_n} non verificabili. Valutare con attenzione."
+        f"Quadro misto — veri: {true_n}, falsi: {false_n}, "
+        f"non verificabili: {unv_n}. Valutare con attenzione."
     )
 
 

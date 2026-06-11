@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import date
 
 from agno.agent import Agent
 from agno.models.deepseek import DeepSeek
@@ -20,7 +21,18 @@ Regole vincolanti:
 3. In evidence_used cita SOLO URL presenti nelle evidenze fornite, con una quote ESATTA
    copiata letteralmente dal testo dell'evidenza (la quote verrà verificata meccanicamente:
    se non esiste nel testo, il verdetto sarà scartato).
-4. reasoning: 1-3 frasi in italiano che spiegano il verdetto citando le fonti.
+4. PERTINENZA: se le evidenze si riferiscono a un PAESE o PERIODO diverso da quello
+   del claim (es. claim sull'inflazione USA, evidenze sull'inflazione italiana),
+   NON usarle né per confermare né per confutare: verdict "unverifiable",
+   segnalando l'ambiguità nel reasoning.
+5. ATTRIBUZIONI: per claim del tipo "X ha detto/dichiarato Y", verifica che X
+   abbia davvero detto Y — NON se Y è vero. Senza evidenza della dichiarazione:
+   "unverifiable".
+6. ATTUALITÀ: per claim al presente su valori che cambiano (prezzi, tassi, cariche),
+   confronta la data delle evidenze con la data odierna fornita. Evidenze datate
+   (mesi o più) → preferisci "unverifiable" e segnala la data dell'evidenza nel
+   reasoning.
+7. reasoning: 1-3 frasi in italiano che spiegano il verdetto citando le fonti.
 """
 
 _agent: Agent | None = None
@@ -50,6 +62,7 @@ async def judge_claim(claim: str, evidences: list[Evidence]) -> ClaimResult:
 
     payload = json.dumps(
         {
+            "data_odierna": date.today().isoformat(),
             "claim": claim,
             "evidenze": [
                 {"url": e.url, "tier": e.tier, "testo": e.content[:3000]} for e in evidences

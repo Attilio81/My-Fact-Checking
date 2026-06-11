@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 
 from agno.agent import Agent
 from agno.models.deepseek import DeepSeek
@@ -15,6 +16,10 @@ Estrai le affermazioni fattuali verificabili (claim), seguendo queste regole:
   (risolvi i pronomi: "lui" → il nome; aggiungi data/luogo se presenti nel testo).
 - Solo claim CHECK-WORTHY: fatti oggettivi verificabili con fonti (numeri, eventi,
   dichiarazioni attribuite, dati). Escludi opinioni, previsioni, giudizi di valore.
+- PRESERVA IL CONTESTO geografico e temporale: se dal testo si deduce il paese
+  (es. autore/tema USA, Fed, Trump, dollari), esplicitalo nel claim
+  ("Negli Stati Uniti i prezzi sono saliti del 4,2%..."), mai lasciarlo ambiguo.
+  Stessa cosa per il periodo, se presente o deducibile dalla data odierna fornita.
 - Scrivi i claim in italiano.
 - Se l'input è una DOMANDA (es. "le scie chimiche fanno male?"), trasformala
   nell'affermazione implicita da verificare (es. "Le scie chimiche fanno male alla salute").
@@ -40,7 +45,8 @@ def _get_agent() -> Agent:
 async def extract_claims(text: str) -> list[str]:
     """Estrae claim atomici check-worthy dal testo. Lista vuota su errore."""
     try:
-        response = await _get_agent().arun(text[:8000])
+        payload = f"Data odierna: {date.today().isoformat()}\n\n{text[:8000]}"
+        response = await _get_agent().arun(payload)
         if isinstance(response.content, ExtractedClaims):
             return response.content.claims[:5]
         logger.warning(f"Extractor output inatteso: {response.content!r}")
