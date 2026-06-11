@@ -8,6 +8,7 @@ httpx
 openai>=1.0.0
 PyYAML
 yt-dlp>=2024.1.0
+instaloader>=4.10
 youtube-transcript-api>=0.6.0
 pytest
 pytest-asyncio>=0.21
