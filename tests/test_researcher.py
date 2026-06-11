@@ -121,6 +121,31 @@ def test_relevance_requires_two_hits_with_many_keys():
     assert _is_relevant(two_hits, keys) is True
 
 
+async def test_news_search_used_for_current_claims():
+    claim = "La Procura di Roma indaga sul Ponte sullo Stretto"
+    current = SearchQueries(queries=["q"], is_current=True)
+    news_item = {
+        "url": "https://www.ansa.it/ponte-indagine",
+        "title": "Procura Roma, indagine Ponte Stretto",
+        "content": "La Procura di Roma indaga sul Ponte sullo Stretto",
+    }
+    with patch(
+        "bot.agents.researcher._generate_queries", AsyncMock(return_value=current)
+    ), patch(
+        "bot.agents.researcher._tavily_search", AsyncMock(return_value=[])
+    ), patch(
+        "bot.agents.researcher._factcheck_search", AsyncMock(return_value=[])
+    ), patch(
+        "bot.agents.researcher._news_search", AsyncMock(return_value=[news_item])
+    ), patch(
+        "bot.agents.researcher._scrape", AsyncMock(return_value="")
+    ):
+        from bot.agents.researcher import gather_evidence
+
+        evs = await gather_evidence(claim, REG)
+    assert any(e.url == "https://www.ansa.it/ponte-indagine" for e in evs)
+
+
 async def test_query_generation_fallback_on_error():
     from bot.agents.researcher import _generate_queries
 

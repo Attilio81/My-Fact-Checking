@@ -115,7 +115,11 @@ async def _generate_queries(claim: str) -> SearchQueries:
         response = await _get_query_agent().arun(payload)
         record(getattr(response, "metrics", None))
         if isinstance(response.content, SearchQueries) and response.content.queries:
-            return response.content
+            sq = response.content
+            logger.info(
+                f"Query per '{claim[:60]}...': {sq.queries} (is_current={sq.is_current})"
+            )
+            return sq
     except Exception as e:
         logger.warning(f"Query generation fallita per '{claim}': {e}")
     return SearchQueries(queries=[claim], is_current=False)
@@ -186,6 +190,51 @@ async def _factcheck_search(query: str) -> list[Evidence]:
         return []
 
 
+# fonti inutilizzabili come evidenza testuale (video, social senza testo stabile)
+_SOCIAL_SKIP = (
+    "facebook.com",
+    "youtube.com",
+    "instagram.com",
+    "tiktok.com",
+    "twitter.com",
+    "x.com",
+)
+
+
+async def _news_search(query: str) -> list[dict]:
+    """Firecrawl search (SERP Google live): copre il ritardo di indicizzazione
+    di Tavily sulle notizie italiane fresche (verificato: Tavily news non copre
+    le testate italiane). I contenuti sono snippet: il rinforzo Firecrawl li
+    completa. Ritorna [{url, title, content}]."""
+
+    def _sync() -> list[dict]:
+        from firecrawl.v1 import V1FirecrawlApp
+
+        app = V1FirecrawlApp(api_key=get_settings().FIRECRAWL_API_KEY.get_secret_value())
+        res = app.search(query, limit=5)
+        items = getattr(res, "data", None) or []
+        out: list[dict] = []
+        for it in items:
+            d = it if isinstance(it, dict) else vars(it)
+            url = d.get("url", "")
+            if not url or any(s in url for s in _SOCIAL_SKIP):
+                continue
+            out.append(
+                {
+                    "url": url,
+                    "title": d.get("title", "") or "",
+                    "content": d.get("description", "") or "",
+                }
+            )
+        return out
+
+    try:
+        return await asyncio.to_thread(_sync)
+    except Exception as e:
+        logger.warning(f"Firecrawl search fallito per '{query}': {e}")
+        return []
+
+
 async def _scrape(url: str) -> str:
     """Firecrawl, contenuto completo. Stringa vuota su errore (fallback snippet Tavily)."""
 
@@ -245,6 +294,12 @@ async def gather_evidence(claim: str, registry: SourceRegistry) -> list[Evidence
         evidences += _collect(
             await _tavily_search(q, registry.trusted_domains(), news=sq.is_current)
         )
+
+    # notizie correnti: SERP live (Firecrawl search) copre il ritardo di
+    # indicizzazione di Tavily sugli articoli italiani freschi
+    if sq.is_current:
+        for q in sq.queries:
+            evidences += _collect(await _news_search(q))
 
     # i domini fidati non hanno dato evidenze PERTINENTI (non solo zero risultati:
     # Tavily riempie sempre con rumore) → si apre la ricerca a tutto il web

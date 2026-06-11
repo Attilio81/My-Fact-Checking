@@ -15,6 +15,10 @@ Estrai le affermazioni fattuali verificabili (claim), seguendo queste regole:
 - Massimo 5 claim, i più rilevanti e centrali della notizia.
 - Ogni claim deve essere ATOMICO: una sola affermazione verificabile, autocontenuta
   (risolvi i pronomi: "lui" → il nome; aggiungi data/luogo se presenti nel testo).
+- CONTESTO ESPLICITO in ogni claim: mai riferimenti generici come "l'indagine",
+  "il progetto", "la vicenda" — sempre il riferimento completo ("l'indagine sul
+  Ponte sullo Stretto di Messina"). Un claim letto da solo, senza il testo
+  originale, deve identificare senza ambiguità di cosa parla.
 - Solo claim CHECK-WORTHY: fatti oggettivi verificabili con fonti (numeri, eventi,
   dichiarazioni attribuite, dati). Escludi opinioni, previsioni, giudizi di valore.
 - PRESERVA IL CONTESTO geografico e temporale: se dal testo si deduce il paese
