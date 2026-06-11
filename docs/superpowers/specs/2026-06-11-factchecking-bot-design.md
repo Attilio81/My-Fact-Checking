@@ -67,6 +67,49 @@ Giudizio complessivo: <sintesi>
 - `checks`: id, created_at, input_type (article|text|image|youtube), input_ref (URL o hash testo), source_title, report_text
 - `claims`: id, check_id (FK), claim_text, verdict (true|false|unverifiable), confidence (high|medium|low), sources (JSON array di URL)
 
+## Anti-allucinazione (requisiti judge e post-validazione)
+
+Principio: il modello non risponde dalla propria memoria — il verdetto deriva esclusivamente dalle evidenze recuperate. Il giudizio è un task di comprensione del testo (le evidenze supportano/confutano il claim?), tassonomia FEVER: supporta / confuta / evidenza insufficiente.
+
+1. **Judge vincolato**: riceve solo claim + evidenze. Prompt: usa esclusivamente le evidenze fornite; se insufficienti o contraddittorie → `unverifiable`; conoscenza interna non ammessa come fonte. Temperature 0.
+2. **Output strutturato** (Pydantic via agno):
+   ```json
+   {
+     "verdict": "true | false | unverifiable",
+     "confidence": "high | medium | low",
+     "evidence_used": [{"url": "...", "quote": "frase esatta dall'evidenza"}],
+     "reasoning": "..."
+   }
+   ```
+3. **Validazione meccanica in codice** (deterministica, dopo il judge):
+   - ogni `url` citato deve appartenere all'insieme degli URL realmente recuperati; URL estraneo → verdetto declassato a `unverifiable`;
+   - ogni `quote` deve esistere nel testo dell'evidenza (match stringa normalizzato); citazione inventata → declassamento;
+   - `verdict` true/false senza almeno 1 evidenza valida → forzato `unverifiable`.
+4. **Confidenza calcolata in codice**, non autodichiarata dal modello: numero di evidenze indipendenti concordi, diversità di domini, tier delle fonti, presenza di contraddizioni (fonti discordanti → `unverifiable` con nota).
+5. `unverifiable` mostrato all'utente è un esito legittimo, mai riempito.
+
+## Fonti a tier
+
+Config `sources.yaml` con gerarchia di fiducia, usata dal researcher (ordine di ricerca) e dal calcolo confidenza (peso evidenze):
+
+- **tier 0 — fact-checker**: verdetti editoriali esistenti via Google Fact Check Tools API (ClaimReview): open.online, pagellapolitica.it, facta.news, snopes.com, reuters.com/fact-check…
+- **tier 1 — fonti primarie**: istat.it, eurostat, iss.it, bancaditalia.it, ansa.it, reuters.com, apnews.com…
+- **tier 2 — stampa maggiore**: corriere.it, repubblica.it, ilsole24ore.com, bbc.com, theguardian.com…
+- **tier 3 — resto del web**: ammesso, peso basso.
+- **blacklist**: noti siti di disinformazione, evidenza mai conteggiata.
+
+Ordine di ricerca per claim: Fact Check API (tier 0, gratuita) → Tavily con `include_domains` tier 1-2 → Tavily aperto (tier 3). Confidenza pesata per tier (2 fonti tier 1 concordi > 5 blog tier 3).
+
+## Escalation deep research (progettata, implementazione v2)
+
+Claim `unverifiable` dopo il primo giro → una chiamata deep research → report con citazioni → ri-giudicato dalla pipeline standard (judge + validazione meccanica: le citazioni del report sono evidenze da verificare, non verdetto finale) → ancora nulla → `unverifiable` onesto.
+
+Opzioni implementative (decisione in v2):
+- deep research nativo agno: Gemini Interactions (`deep-research-preview-*`, citazioni strutturate, preferito) o OpenAI `o4-mini-deep-research` — richiede key aggiuntiva;
+- agente iterativo DeepSeek + tool di ricerca (DeepSeek non ha deep research nativo), pattern minimale dzhng/deep-research.
+
+Costo controllato: parte solo sui claim difficili.
+
 ## Gestione errori
 
 - Timeout per ogni chiamata agente (`AGENT_TIMEOUT_SECONDS`, default 60s come BrainDrop).
@@ -85,7 +128,7 @@ Giudizio complessivo: <sintesi>
 - Valutazione affidabilità della testata/dominio.
 - Multi-utente.
 - Admin web.
-- Iterazione extra di ricerca sui claim rimasti non verificabili (architettura ibrida).
+- Escalation deep research sui claim non verificabili (progettata sopra, implementazione v2).
 - Supabase / deploy remoto.
 
 ## Riferimenti
