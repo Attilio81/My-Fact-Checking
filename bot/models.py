@@ -26,6 +26,7 @@ class Evidence(BaseModel):
     title: str = ""
     content: str = ""
     tier: int = 3  # 0=factchecker, 1=primaria, 2=stampa, 3=resto
+    is_context: bool = False  # documento citato nel contenuto: bypassa il filtro pertinenza
 
 
 class EvidenceQuote(BaseModel):

@@ -49,9 +49,13 @@ _PAYWALL_MARKERS = (
 # parole maiuscole da ignorare nell'estrazione entità (inizio frase, comuni)
 _KEY_STOPWORDS = {
     "il", "la", "lo", "le", "gli", "un", "una", "uno", "nel", "nella", "negli",
-    "della", "dello", "dei", "delle", "del", "secondo", "secondo", "tre", "due",
+    "della", "dello", "dei", "delle", "del", "secondo", "tre", "due",
     "quattro", "cinque", "sei", "dieci", "questo", "questa", "nessuna", "nessun",
-    "dopo", "prima", "oggi", "ieri", "tuttavia", "inoltre", "the", "a", "in",
+    "dopo", "prima", "oggi", "ieri", "tuttavia", "inoltre", "a", "in",
+    # inglesi: inizio frase e funzionali (i claim possono sfuggire in inglese)
+    "the", "according", "some", "this", "that", "these", "those", "with",
+    "from", "they", "their", "there", "when", "where", "what", "while",
+    "after", "before", "during", "about",
 }
 
 
@@ -264,10 +268,16 @@ async def fetch_context_documents(
     tier 1): scaricate una volta, condivise come evidenza per tutti i claim.
     Anti-circolarità: solo fonti primarie — mai il post stesso o blog, altrimenti
     si verificherebbe il post col post."""
+    candidates = [m.group().rstrip(".,;") for m in _URL_IN_TEXT_RE.finditer(text)]
+    # nelle caption social i link sono spesso senza protocollo o come ID arXiv
+    for m in re.finditer(r"arXiv[:\s]*(\d{4}\.\d{4,5})", text, re.IGNORECASE):
+        candidates.append(f"https://arxiv.org/abs/{m.group(1)}")
+    for m in re.finditer(r"(?<![\w/])((?:arxiv|doi)\.org/[^\s)\]>\"']+)", text):
+        candidates.append("https://" + m.group(1).rstrip(".,;"))
+
     docs: list[Evidence] = []
     seen: set[str] = set()
-    for m in _URL_IN_TEXT_RE.finditer(text):
-        url = m.group().rstrip(".,;")
+    for url in candidates:
         if url in seen:
             continue
         seen.add(url)
@@ -286,6 +296,7 @@ async def fetch_context_documents(
                     title="documento citato nel contenuto",
                     content=content[:6000],
                     tier=min(registry.tier_of(url), 1),
+                    is_context=True,
                 )
             )
             logger.info(f"Documento di contesto caricato: {url}")
@@ -310,9 +321,10 @@ async def gather_evidence(
     evidences: list[Evidence] = []
     seen_urls: set[str] = set()
 
-    # riuso dal pool condiviso della verifica
+    # riuso dal pool condiviso della verifica; i documenti citati nel contenuto
+    # arrivano a OGNI claim, senza filtro pertinenza
     for ev in pool or []:
-        if ev.url not in seen_urls and _is_relevant(ev, keys):
+        if ev.url not in seen_urls and (ev.is_context or _is_relevant(ev, keys)):
             seen_urls.add(ev.url)
             evidences.append(ev)
 

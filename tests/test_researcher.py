@@ -193,6 +193,37 @@ async def test_fetch_context_documents_only_primary():
     ]
     assert "https://blogqualsiasi.example/post" not in scraped
     assert all(d.tier <= 1 for d in docs)
+    assert all(d.is_context for d in docs)
+
+
+async def test_fetch_context_documents_arxiv_id_and_bare_links():
+    from bot.agents.researcher import fetch_context_documents
+
+    text = "Nuovo studio pazzesco! Paper: arXiv:2602.20021 (su arxiv.org/abs/2602.20021)"
+
+    async def fake_scrape(url):
+        return "abstract del paper"
+
+    with patch("bot.agents.researcher._scrape", side_effect=fake_scrape):
+        docs = await fetch_context_documents(text, REG)
+
+    assert [d.url for d in docs] == ["https://arxiv.org/abs/2602.20021"]
+
+
+async def test_context_doc_bypasses_relevance_filter():
+    from bot.models import Evidence
+
+    claim = "Secondo il paper, alcuni agenti hanno mentito"  # nessuna entità utile
+    pool = [
+        Evidence(url="https://arxiv.org/abs/1", title="documento citato nel contenuto",
+                 content="agents reported task completion falsely", tier=1, is_context=True)
+    ]
+    p1, p2, p3, p4 = _patches([[], []])
+    with p1, p2, p3, p4:
+        from bot.agents.researcher import gather_evidence
+
+        evs = await gather_evidence(claim, REG, pool=pool)
+    assert any(e.url == "https://arxiv.org/abs/1" for e in evs)
 
 
 async def test_query_generation_fallback_on_error():

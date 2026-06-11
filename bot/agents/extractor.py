@@ -29,7 +29,12 @@ Estrai le affermazioni fattuali verificabili (claim), seguendo queste regole:
   (es. autore/tema USA, Fed, Trump, dollari), esplicitalo nel claim
   ("Negli Stati Uniti i prezzi sono saliti del 4,2%..."), mai lasciarlo ambiguo.
   Stessa cosa per il periodo, se presente o deducibile dalla data odierna fornita.
-- Scrivi i claim in italiano.
+- Scrivi i claim SEMPRE E SOLO IN ITALIANO, anche se il testo di partenza è in
+  inglese o altra lingua. Mai claim in inglese.
+- Se i claim riguardano un documento (paper, studio, report, sentenza), OGNI
+  claim deve ripetere il nome completo del documento: mai "il paper" o "lo
+  studio" da soli. GIUSTO: "Nel paper 'Agents of Chaos' (arXiv:2602.20021),
+  alcuni agenti...". SBAGLIATO: "Secondo il paper, alcuni agenti...".
 - Se l'input è una DOMANDA (es. "le scie chimiche fanno male?"), trasformala
   nell'affermazione implicita da verificare (es. "Le scie chimiche fanno male alla salute").
 - Se l'input è un testo breve con una sola affermazione, quel testo È il claim:
