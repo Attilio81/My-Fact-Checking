@@ -16,7 +16,12 @@ Estrai le affermazioni fattuali verificabili (claim), seguendo queste regole:
 - Solo claim CHECK-WORTHY: fatti oggettivi verificabili con fonti (numeri, eventi,
   dichiarazioni attribuite, dati). Escludi opinioni, previsioni, giudizi di valore.
 - Scrivi i claim in italiano.
-- Se il testo non contiene claim verificabili, restituisci lista vuota."""
+- Se l'input è una DOMANDA (es. "le scie chimiche fanno male?"), trasformala
+  nell'affermazione implicita da verificare (es. "Le scie chimiche fanno male alla salute").
+- Se l'input è un testo breve con una sola affermazione, quel testo È il claim:
+  riportalo ripulito, non scartarlo.
+- Restituisci lista vuota SOLO se il testo non contiene nulla di fattualmente
+  verificabile (es. puri saluti, opinioni personali, emozioni)."""
 
 _agent: Agent | None = None
 
