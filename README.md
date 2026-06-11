@@ -1,11 +1,22 @@
 # FactChecking Bot 🔍
 
-Bot Telegram personale per il fact-checking di notizie. Invii un link, un testo, uno screenshot o un video YouTube — il bot estrae le affermazioni verificabili (claim), cerca evidenze sul web e risponde con un verdetto per ogni claim, con fonti citate.
+Bot Telegram personale per il fact-checking di notizie. Invii un link, un testo, uno screenshot, un video YouTube, un post/reel Instagram o un video TikTok — il bot estrae le affermazioni verificabili (claim), cerca evidenze sul web e risponde con un verdetto per ogni claim, con fonti citate. Funziona anche con domande ("le scie chimiche fanno male?" → verifica il claim implicito).
+
+## Input supportati
+
+| Input | Estrazione |
+|---|---|
+| 🔗 Link articolo | Firecrawl → testo |
+| 📝 Testo / claim incollato | diretto (domande → claim implicito) |
+| 📸 Screenshot post social | OCR vision (gpt-4o-mini) |
+| ▶️ Video YouTube | yt-dlp metadata + transcript |
+| 📷 Post/reel Instagram | instaloader caption + OCR slide caroselli + Whisper su audio reel |
+| 🎵 Video TikTok | yt-dlp caption + Whisper su audio (anche link brevi vm/vt.tiktok.com) |
 
 ## Come funziona
 
 ```
-input (link / testo / foto / YouTube)
+input (link / testo / foto / YouTube / Instagram / TikTok)
    │
    ▼
 ingest ──────────► testo della notizia
@@ -50,6 +61,8 @@ Il verdetto non si fida del modello:
 - [agno](https://github.com/agno-agi/agno) + DeepSeek — agenti LLM (extractor, judge)
 - [Tavily](https://tavily.com) — ricerca evidenze
 - [Firecrawl](https://firecrawl.dev) — scraping articoli e fonti
+- OpenAI — vision OCR (gpt-4o-mini) e trascrizione audio (Whisper)
+- instaloader + yt-dlp — estrazione contenuti social
 - python-telegram-bot — interfaccia
 - SQLite — archivio verifiche + cache (stesso URL < 7 giorni → risposta immediata)
 
@@ -63,7 +76,11 @@ copy .env.example .env        # poi compila le chiavi
 python -m bot.main
 ```
 
-Chiavi richieste: `TELEGRAM_BOT_TOKEN`, `AUTHORIZED_USER_ID`, `DEEPSEEK_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY`, `OPENAI_API_KEY` (solo OCR screenshot). Opzionale: `GOOGLE_FACTCHECK_API_KEY` (tier 0).
+In alternativa, doppio click su `start.bat`.
+
+Chiavi richieste: `TELEGRAM_BOT_TOKEN`, `AUTHORIZED_USER_ID`, `DEEPSEEK_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY`, `OPENAI_API_KEY` (OCR screenshot e Whisper). Opzionale: `GOOGLE_FACTCHECK_API_KEY` (tier 0).
+
+Su Telegram: `/start` mostra le istruzioni; poi invia direttamente il contenuto da verificare. Solo l'utente con `AUTHORIZED_USER_ID` viene servito.
 
 ## Test
 
