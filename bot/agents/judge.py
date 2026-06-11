@@ -6,6 +6,7 @@ from agno.agent import Agent
 from agno.models.deepseek import DeepSeek
 
 from bot.models import ClaimResult, Evidence, JudgeOutput
+from bot.usage import record
 from bot.validation import compute_confidence, validate_judge_output
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ def _unverifiable(claim: str, reasoning: str) -> ClaimResult:
 async def _arun_judge(payload: str) -> JudgeOutput | None:
     try:
         response = await _get_agent().arun(payload)
+        record(getattr(response, "metrics", None))
         if isinstance(response.content, JudgeOutput):
             return response.content
         logger.warning(f"Judge output inatteso: {response.content!r}")

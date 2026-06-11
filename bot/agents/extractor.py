@@ -5,6 +5,7 @@ from agno.agent import Agent
 from agno.models.deepseek import DeepSeek
 
 from bot.models import ExtractedClaims
+from bot.usage import record
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ async def extract_claims(text: str) -> list[str]:
     try:
         payload = f"Data odierna: {date.today().isoformat()}\n\n{text[:8000]}"
         response = await _get_agent().arun(payload)
+        record(getattr(response, "metrics", None))
         if isinstance(response.content, ExtractedClaims):
             return response.content.claims[:5]
         logger.warning(f"Extractor output inatteso: {response.content!r}")

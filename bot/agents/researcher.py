@@ -10,6 +10,7 @@ from tavily import TavilyClient
 from bot.config import get_settings
 from bot.models import Evidence, SearchQueries
 from bot.sources import SourceRegistry
+from bot.usage import record
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ async def _generate_queries(claim: str) -> SearchQueries:
     try:
         payload = f"Data odierna: {date.today().isoformat()}\nClaim: {claim}"
         response = await _get_query_agent().arun(payload)
+        record(getattr(response, "metrics", None))
         if isinstance(response.content, SearchQueries) and response.content.queries:
             return response.content
     except Exception as e:
