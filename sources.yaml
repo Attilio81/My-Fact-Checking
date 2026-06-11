@@ -14,6 +14,16 @@ tier_1_primarie:
   - apnews.com
   - governo.it
   - europa.eu
+  - ncbi.nlm.nih.gov
+  - pubmed.ncbi.nlm.nih.gov
+  - nature.com
+  - science.org
+  - thelancet.com
+  - nejm.org
+  - who.int
+  - cdc.gov
+  - efsa.europa.eu
+  - ipcc.ch
 tier_2_stampa:
   - corriere.it
   - repubblica.it
@@ -22,4 +32,7 @@ tier_2_stampa:
   - bbc.com
   - theguardian.com
   - nytimes.com
+  - arxiv.org
+  - scientificamerican.com
+  - lescienze.it
 blacklist: []
