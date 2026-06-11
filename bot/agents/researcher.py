@@ -252,24 +252,79 @@ async def _scrape(url: str) -> str:
         return ""
 
 
-async def gather_evidence(claim: str, registry: SourceRegistry) -> list[Evidence]:
-    """Ordine spec: FactCheck API (tier 0) → Tavily domini fidati → Tavily aperto.
-    Query mirate generate da un agente (incluso inglese per claim internazionali).
-    Blacklist sempre esclusa. raw_content Tavily, Firecrawl come rinforzo."""
+_URL_IN_TEXT_RE = re.compile(r"https?://[^\s)\]>\"']+")
+_CONTEXT_DOC_DOMAINS = ("arxiv.org", "doi.org")
+_MAX_CONTEXT_DOCS = 2
+
+
+async def fetch_context_documents(
+    text: str, registry: SourceRegistry, max_docs: int = _MAX_CONTEXT_DOCS
+) -> list[Evidence]:
+    """Fonti primarie LINKATE nel contenuto da verificare (paper arXiv/DOI, enti
+    tier 1): scaricate una volta, condivise come evidenza per tutti i claim.
+    Anti-circolarità: solo fonti primarie — mai il post stesso o blog, altrimenti
+    si verificherebbe il post col post."""
+    docs: list[Evidence] = []
+    seen: set[str] = set()
+    for m in _URL_IN_TEXT_RE.finditer(text):
+        url = m.group().rstrip(".,;")
+        if url in seen:
+            continue
+        seen.add(url)
+        domain = SourceRegistry._domain(url)
+        is_primary = (
+            any(domain == d or domain.endswith("." + d) for d in _CONTEXT_DOC_DOMAINS)
+            or registry.tier_of(url) <= 1
+        )
+        if not is_primary or registry.is_blacklisted(url):
+            continue
+        content = await _scrape(url)
+        if content:
+            docs.append(
+                Evidence(
+                    url=url,
+                    title="documento citato nel contenuto",
+                    content=content[:6000],
+                    tier=min(registry.tier_of(url), 1),
+                )
+            )
+            logger.info(f"Documento di contesto caricato: {url}")
+        if len(docs) >= max_docs:
+            break
+    return docs
+
+
+async def gather_evidence(
+    claim: str, registry: SourceRegistry, pool: list[Evidence] | None = None
+) -> list[Evidence]:
+    """Ordine spec: pool della verifica → FactCheck API (tier 0) → Tavily domini
+    fidati → Tavily aperto. Query mirate generate da un agente (incluso inglese
+    per claim internazionali). Blacklist sempre esclusa. raw_content Tavily,
+    Firecrawl come rinforzo.
+
+    pool: evidenze già raccolte per altri claim della stessa verifica (più i
+    documenti di contesto) — riusate se pertinenti, arricchite a fine chiamata."""
     sq = await _generate_queries(claim)
     keys = _claim_keys(claim)
 
     evidences: list[Evidence] = []
-    fc_seen: set[str] = set()
+    seen_urls: set[str] = set()
+
+    # riuso dal pool condiviso della verifica
+    for ev in pool or []:
+        if ev.url not in seen_urls and _is_relevant(ev, keys):
+            seen_urls.add(ev.url)
+            evidences.append(ev)
+
+    fc_found = False
     for q in [claim, *sq.queries]:
         for ev in await _factcheck_search(q):
-            if ev.url and ev.url not in fc_seen and _is_relevant(ev, keys):
-                fc_seen.add(ev.url)
+            if ev.url and ev.url not in seen_urls and _is_relevant(ev, keys):
+                seen_urls.add(ev.url)
                 evidences.append(ev)
-        if evidences:
+                fc_found = True
+        if fc_found:
             break  # primo match tier 0 basta, niente chiamate ridondanti
-
-    seen_urls = {e.url for e in evidences}
 
     def _collect(results: list[dict]) -> list[Evidence]:
         """Risultati Tavily → Evidence pertinenti (dedup, blacklist, filtro entità)."""
@@ -316,4 +371,11 @@ async def gather_evidence(claim: str, registry: SourceRegistry) -> list[Evidence
         if full:
             ev.content = full
 
-    return evidences[: _MAX_RESULTS + 3]
+    result = evidences[: _MAX_RESULTS + 3]
+
+    # arricchisce il pool condiviso: i claim successivi riusano queste evidenze
+    if pool is not None:
+        pool_urls = {e.url for e in pool}
+        pool.extend(e for e in result if e.url not in pool_urls)
+
+    return result

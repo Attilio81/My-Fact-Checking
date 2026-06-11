@@ -2,8 +2,8 @@ import logging
 
 from bot.agents.extractor import extract_claims
 from bot.agents.judge import judge_claim
-from bot.agents.researcher import gather_evidence
-from bot.models import ClaimResult
+from bot.agents.researcher import fetch_context_documents, gather_evidence
+from bot.models import ClaimResult, Evidence
 from bot.report import format_report
 from bot.sources import SourceRegistry
 from bot.usage import start_tracking
@@ -28,9 +28,14 @@ async def run_check(text: str, title: str = "notizia") -> tuple[str, list[ClaimR
     if not claims:
         return ("Nessun claim verificabile trovato nel contenuto.", [])
 
+    registry = _get_registry()
+    # documenti primari citati nel contenuto (paper, dati ufficiali) +
+    # evidenze raccolte per i claim precedenti: condivisi tra tutti i claim
+    pool: list[Evidence] = await fetch_context_documents(text, registry)
+
     results: list[ClaimResult] = []
     for claim in claims:
-        evidences = await gather_evidence(claim, _get_registry())
+        evidences = await gather_evidence(claim, registry, pool=pool)
         results.append(await judge_claim(claim, evidences))
 
     report = format_report(title, results)

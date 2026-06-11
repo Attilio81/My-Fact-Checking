@@ -146,6 +146,55 @@ async def test_news_search_used_for_current_claims():
     assert any(e.url == "https://www.ansa.it/ponte-indagine" for e in evs)
 
 
+async def test_pool_reused_and_enriched():
+    from bot.models import Evidence
+
+    claim = "Nel paper Agents of Chaos gli agenti hanno mentito"
+    pool = [
+        Evidence(url="https://arxiv.org/abs/1", title="Agents of Chaos",
+                 content="agents of chaos: agents reported task completion falsely", tier=1),
+        Evidence(url="https://altro.example/x", title="Altro",
+                 content="contenuto su tutt'altro tema senza parole chiave", tier=3),
+    ]
+    new_result = _tavily_result(
+        "https://www.ansa.it/chaos", content="il paper Agents of Chaos documenta agenti"
+    )
+    p1, p2, p3, p4 = _patches([[new_result], []])
+    with p1, p2, p3, p4:
+        from bot.agents.researcher import gather_evidence
+
+        evs = await gather_evidence(claim, REG, pool=pool)
+    urls = [e.url for e in evs]
+    assert "https://arxiv.org/abs/1" in urls  # riusata dal pool (pertinente)
+    assert "https://altro.example/x" not in urls  # pool ma non pertinente
+    assert "https://www.ansa.it/chaos" in urls  # nuova
+    assert any(e.url == "https://www.ansa.it/chaos" for e in pool)  # pool arricchito
+
+
+async def test_fetch_context_documents_only_primary():
+    from bot.agents.researcher import fetch_context_documents
+
+    text = (
+        "Guarda questo paper https://arxiv.org/abs/2602.20021 e questo blog "
+        "https://blogqualsiasi.example/post e i dati https://www.istat.it/dati/x"
+    )
+    scraped = []
+
+    async def fake_scrape(url):
+        scraped.append(url)
+        return f"contenuto di {url}"
+
+    with patch("bot.agents.researcher._scrape", side_effect=fake_scrape):
+        docs = await fetch_context_documents(text, REG)
+
+    assert [d.url for d in docs] == [
+        "https://arxiv.org/abs/2602.20021",
+        "https://www.istat.it/dati/x",
+    ]
+    assert "https://blogqualsiasi.example/post" not in scraped
+    assert all(d.tier <= 1 for d in docs)
+
+
 async def test_query_generation_fallback_on_error():
     from bot.agents.researcher import _generate_queries
 
