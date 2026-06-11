@@ -11,6 +11,11 @@ def test_detect_instagram():
     assert detect_input_type("https://instagram.com/p/Abc123/") == "instagram"
 
 
+def test_detect_tiktok():
+    assert detect_input_type("https://www.tiktok.com/@user/video/123456") == "tiktok"
+    assert detect_input_type("https://vm.tiktok.com/ZMabcdef/") == "tiktok"
+
+
 def test_detect_article():
     assert detect_input_type("guarda https://news.example/articolo") == "article"
 

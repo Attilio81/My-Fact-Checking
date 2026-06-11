@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot.config import get_settings
-from bot.ingest import article, image, instagram, youtube
+from bot.ingest import article, image, instagram, tiktok, youtube
 from bot.pipeline import run_check
 from db.models import Database
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 _URL_RE = re.compile(r"https?://\S+")
 _YT_RE = re.compile(r"(youtube\.com/watch|youtu\.be/|youtube\.com/shorts)")
 _IG_RE = re.compile(r"instagram\.com/(p|reel)/")
+_TT_RE = re.compile(r"(vm\.|vt\.|www\.)?tiktok\.com/")
 
 _db: Database | None = None
 
@@ -34,6 +35,8 @@ def detect_input_type(text: str) -> str:
             return "youtube"
         if _IG_RE.search(m.group()):
             return "instagram"
+        if _TT_RE.search(m.group()):
+            return "tiktok"
         return "article"
     return "text"
 
@@ -50,7 +53,8 @@ _WELCOME = (
     "📝 testo o claim incollato\n"
     "📸 screenshot di un post social\n"
     "▶️ link a un video YouTube\n"
-    "📷 link a un post o reel Instagram\n\n"
+    "📷 link a un post o reel Instagram\n"
+    "🎵 link a un video TikTok\n\n"
     "Estraggo le affermazioni verificabili, cerco evidenze sul web e ti rispondo "
     "con un verdetto per ciascuna: ✅ vero, ❌ falso o ⚠️ non verificabile, con le fonti."
 )
@@ -86,6 +90,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             url = _URL_RE.search(text).group()
             input_ref = url
             extracted = await instagram.extract(url)
+        elif input_type == "tiktok":
+            url = _URL_RE.search(text).group()
+            input_ref = url
+            extracted = await tiktok.extract(url)
         elif input_type == "article":
             url = _URL_RE.search(text).group()
             input_ref = url

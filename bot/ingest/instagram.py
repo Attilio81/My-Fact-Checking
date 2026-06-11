@@ -8,9 +8,9 @@ from pathlib import Path
 
 import httpx
 import instaloader
-import yt_dlp
 
 from bot.config import get_settings
+from bot.ingest.media import transcribe_audio
 
 logger = logging.getLogger(__name__)
 
@@ -55,45 +55,6 @@ def _ocr_image(image_path: Path, api_key: str) -> str:
     return ""
 
 
-def _transcribe_reel(reel_url: str, api_key: str) -> str:
-    """Scarica lo stream audio del reel e trascrive con Whisper.
-
-    yt-dlp prende il bestaudio (m4a, di solito <5 MB), entro il limite 25 MB
-    di Whisper senza bisogno di ffmpeg. Stringa vuota su qualsiasi errore.
-    """
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            ydl_opts = {
-                "format": "bestaudio[vcodec=none]/bestaudio",
-                "outtmpl": str(Path(tmpdir) / "reel.%(ext)s"),
-                "quiet": True,
-                "no_warnings": True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(reel_url, download=True)
-                ext = info.get("ext", "m4a")
-
-            downloaded = next(Path(tmpdir).glob(f"reel.{ext}"), None)
-            if downloaded is None:
-                logger.warning("yt-dlp produced no output file for reel")
-                return ""
-
-            with httpx.Client(timeout=120) as client:
-                with downloaded.open("rb") as audio_file:
-                    resp = client.post(
-                        "https://api.openai.com/v1/audio/transcriptions",
-                        headers={"Authorization": f"Bearer {api_key}"},
-                        data={"model": "whisper-1"},
-                        files={"file": (f"reel.{ext}", audio_file, f"audio/{ext}")},
-                    )
-                resp.raise_for_status()
-                return resp.json().get("text", "").strip()
-
-    except Exception as e:
-        logger.warning(f"Whisper transcription failed for reel: {e}")
-        return ""
-
-
 def _extract_sync(url: str) -> dict | None:
     shortcode = _get_shortcode(url)
     if not shortcode:
@@ -135,7 +96,7 @@ def _extract_sync(url: str) -> dict | None:
             image_urls = [post.url]
         else:
             image_urls = []  # Reel — niente immagini
-            transcript = _transcribe_reel(url, api_key)
+            transcript = transcribe_audio(url, api_key)
 
         for i, img_url in enumerate(image_urls):
             if i > 0:
