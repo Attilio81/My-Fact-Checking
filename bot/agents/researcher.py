@@ -1,20 +1,58 @@
 import asyncio
 import logging
+from datetime import date
 
 import httpx
+from agno.agent import Agent
+from agno.models.deepseek import DeepSeek
 from tavily import TavilyClient
 
 from bot.config import get_settings
-from bot.models import Evidence
+from bot.models import Evidence, SearchQueries
 from bot.sources import SourceRegistry
 
 logger = logging.getLogger(__name__)
+
+_QUERY_PROMPT = """Sei un generatore di query di ricerca per il fact-checking di un claim.
+
+Genera 2-3 query brevi e mirate per trovare evidenze sul claim, seguendo queste regole:
+- Parole chiave essenziali, NON la frase intera del claim.
+- Angolazioni diverse: dato ufficiale/statistica, notizia, eventuale smentita.
+- Se il claim riguarda fatti internazionali o di un paese non italiano (USA, mondo),
+  almeno una query DEVE essere in INGLESE: le fonti primarie sono in inglese.
+- is_current = true se il claim riguarda eventi recenti o valori che cambiano
+  (prezzi, tassi, guerre in corso, dichiarazioni di attualità); false per fatti
+  storici o scientifici consolidati."""
 
 _MAX_RESULTS = 5
 _SCRAPE_TOP_N = 2  # Firecrawl solo sulle prime N evidenze (costo)
 _FACTCHECK_URL = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
 
 _tavily: TavilyClient | None = None
+_query_agent: Agent | None = None
+
+
+def _get_query_agent() -> Agent:
+    global _query_agent
+    if _query_agent is None:
+        _query_agent = Agent(
+            model=DeepSeek(id="deepseek-v4-flash", temperature=0),
+            instructions=_QUERY_PROMPT,
+            output_schema=SearchQueries,
+        )
+    return _query_agent
+
+
+async def _generate_queries(claim: str) -> SearchQueries:
+    """Query mirate per il claim. Fallback: il claim stesso come unica query."""
+    try:
+        payload = f"Data odierna: {date.today().isoformat()}\nClaim: {claim}"
+        response = await _get_query_agent().arun(payload)
+        if isinstance(response.content, SearchQueries) and response.content.queries:
+            return response.content
+    except Exception as e:
+        logger.warning(f"Query generation fallita per '{claim}': {e}")
+    return SearchQueries(queries=[claim], is_current=False)
 
 
 def _get_tavily() -> TavilyClient:
@@ -24,11 +62,20 @@ def _get_tavily() -> TavilyClient:
     return _tavily
 
 
-async def _tavily_search(query: str, include_domains: list[str] | None) -> list[dict]:
+async def _tavily_search(
+    query: str, include_domains: list[str] | None, news: bool = False
+) -> list[dict]:
     def _sync() -> list[dict]:
-        kwargs = {"max_results": _MAX_RESULTS, "search_depth": "advanced"}
+        kwargs = {
+            "max_results": _MAX_RESULTS,
+            "search_depth": "advanced",
+            "include_raw_content": True,
+        }
         if include_domains:
             kwargs["include_domains"] = include_domains
+        if news:
+            kwargs["topic"] = "news"
+            kwargs["time_range"] = "year"
         return _get_tavily().search(query, **kwargs).get("results", [])
 
     try:
@@ -90,27 +137,39 @@ async def _scrape(url: str) -> str:
 
 async def gather_evidence(claim: str, registry: SourceRegistry) -> list[Evidence]:
     """Ordine spec: FactCheck API (tier 0) → Tavily domini fidati → Tavily aperto.
-    Blacklist sempre esclusa. Firecrawl sulle prime evidenze, fallback snippet."""
+    Query mirate generate da un agente (incluso inglese per claim internazionali).
+    Blacklist sempre esclusa. raw_content Tavily, Firecrawl come rinforzo."""
     evidences = await _factcheck_search(claim)
 
-    results = await _tavily_search(claim, registry.trusted_domains())
+    sq = await _generate_queries(claim)
+    results: list[dict] = []
+    for q in sq.queries:
+        results += await _tavily_search(q, registry.trusted_domains(), news=sq.is_current)
     if not results:
-        results = await _tavily_search(claim, None)
+        for q in sq.queries:
+            results += await _tavily_search(q, None, news=sq.is_current)
+            if results:
+                break
 
+    seen_urls = {e.url for e in evidences}
     for r in results:
         url = r.get("url", "")
-        if not url or registry.is_blacklisted(url):
+        if not url or url in seen_urls or registry.is_blacklisted(url):
             continue
+        seen_urls.add(url)
+        content = r.get("raw_content") or r.get("content") or ""
         evidences.append(
             Evidence(
                 url=url,
                 title=r.get("title", ""),
-                content=r.get("content", ""),
+                content=content[:6000],
                 tier=registry.tier_of(url),
             )
         )
 
-    for ev in [e for e in evidences if e.tier > 0][:_SCRAPE_TOP_N]:
+    # Firecrawl solo dove Tavily non ha dato contenuto pieno
+    thin = [e for e in evidences if e.tier > 0 and len(e.content) < 500]
+    for ev in thin[:_SCRAPE_TOP_N]:
         full = await _scrape(ev.url)
         if full:
             ev.content = full

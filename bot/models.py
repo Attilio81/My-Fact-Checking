@@ -12,6 +12,13 @@ class ExtractedClaims(BaseModel):
     claims: list[str] = Field(default_factory=list, max_length=5)
 
 
+class SearchQueries(BaseModel):
+    """Output del query generator: query mirate per cercare evidenze su un claim."""
+
+    queries: list[str] = Field(default_factory=list, max_length=3)
+    is_current: bool = False  # claim su eventi/valori correnti → ricerca news recenti
+
+
 class Evidence(BaseModel):
     """Una evidenza recuperata dal researcher."""
 
