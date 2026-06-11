@@ -6,6 +6,7 @@ import tempfile
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from bot import wiki
 from bot.config import get_settings
 from bot.ingest import article, image, instagram, tiktok, youtube
 from bot.pipeline import run_check
@@ -130,5 +131,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await msg.reply_text("❌ Errore durante la verifica. Riprova più tardi.")
         return
 
-    _get_db().save_check(input_type, input_ref, extracted.get("title"), report, results)
+    db = _get_db()
+    check_id = db.save_check(
+        input_type, input_ref, extracted.get("title"), report, results
+    )
+    check = db.get_check(check_id)
+    if check is not None:
+        wiki.publish(
+            get_settings().WIKI_DIR,
+            check_id,
+            check["created_at"],
+            extracted.get("title") or "notizia",
+            input_type,
+            input_ref,
+            results,
+            db.list_checks_summary(),
+        )
     await msg.reply_text(report, disable_web_page_preview=True)

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     AGENT_TIMEOUT_SECONDS: int = Field(default=60, gt=0)
     DB_PATH: str = "factcheck.db"
+    WIKI_DIR: str = "wiki"
 
 
 @lru_cache

@@ -28,6 +28,22 @@ def test_cache_hit(tmp_path):
     assert cached == "report-text"
 
 
+def test_get_check_and_summary(tmp_path):
+    db = _db(tmp_path)
+    results = [
+        ClaimResult(claim="A", verdict="true", confidence="high", sources=[], reasoning=""),
+        ClaimResult(claim="B", verdict="unverifiable", confidence="low", sources=[], reasoning=""),
+    ]
+    check_id = db.save_check("article", "https://x/a", "Titolo", "report", results)
+    check = db.get_check(check_id)
+    assert check["source_title"] == "Titolo"
+    assert check["created_at"]
+    summary = db.list_checks_summary()
+    assert summary[0]["true_n"] == 1
+    assert summary[0]["unv_n"] == 1
+    assert summary[0]["false_n"] == 0
+
+
 def test_cache_miss(tmp_path):
     db = _db(tmp_path)
     assert db.get_recent_check("https://mai.visto/x", days=7) is None

@@ -56,6 +56,35 @@ class Database:
             )
         return check_id
 
+    def get_check(self, check_id: int) -> dict | None:
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT id, created_at, input_type, input_ref, source_title "
+                "FROM checks WHERE id = ?",
+                (check_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        keys = ["id", "created_at", "input_type", "input_ref", "source_title"]
+        return dict(zip(keys, row))
+
+    def list_checks_summary(self) -> list[dict]:
+        """Tutti i check (più recenti prima) con conteggio verdetti, per l'indice wiki."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT c.id, c.created_at, c.input_type, c.input_ref, c.source_title, "
+                "COALESCE(SUM(cl.verdict = 'true'), 0), "
+                "COALESCE(SUM(cl.verdict = 'false'), 0), "
+                "COALESCE(SUM(cl.verdict = 'unverifiable'), 0) "
+                "FROM checks c LEFT JOIN claims cl ON cl.check_id = c.id "
+                "GROUP BY c.id ORDER BY c.created_at DESC, c.id DESC"
+            ).fetchall()
+        keys = [
+            "id", "created_at", "input_type", "input_ref", "source_title",
+            "true_n", "false_n", "unv_n",
+        ]
+        return [dict(zip(keys, r)) for r in rows]
+
     def get_recent_check(self, input_ref: str, days: int = 7) -> str | None:
         with self._conn() as c:
             row = c.execute(
