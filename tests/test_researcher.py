@@ -75,6 +75,29 @@ def test_is_thin_detection():
     assert _is_thin("Testo di articolo vero e sostanzioso. " * 30) is False
 
 
+async def test_irrelevant_filtered_and_open_fallback():
+    claim = "La Procura di Roma indaga sul Ponte sullo Stretto di Messina"
+    noise = _tavily_result("https://www.bbc.com/korea", content="Korea bridge scandal in Seoul")
+    good = _tavily_result(
+        "https://www.open.online/ponte",
+        content="La Procura di Roma indaga per corruzione sul Ponte sullo Stretto",
+    )
+    p1, p2, p3, p4 = _patches([[noise], [good]])
+    with p1, p2, p3, p4:
+        from bot.agents.researcher import gather_evidence
+
+        evs = await gather_evidence(claim, REG)
+    assert [e.url for e in evs] == ["https://www.open.online/ponte"]
+
+
+def test_claim_keys_extraction():
+    from bot.agents.researcher import _claim_keys
+
+    keys = _claim_keys("La Procura di Roma indaga sul Ponte: costo 13,5 miliardi")
+    assert {"procura", "roma", "ponte", "13,5"} <= keys
+    assert "la" not in keys
+
+
 async def test_query_generation_fallback_on_error():
     from bot.agents.researcher import _generate_queries
 

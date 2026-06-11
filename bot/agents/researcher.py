@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import date
 
 import httpx
@@ -43,6 +44,37 @@ _PAYWALL_MARKERS = (
     "sign in to read",
     "create a free account",
 )
+
+
+# parole maiuscole da ignorare nell'estrazione entità (inizio frase, comuni)
+_KEY_STOPWORDS = {
+    "il", "la", "lo", "le", "gli", "un", "una", "uno", "nel", "nella", "negli",
+    "della", "dello", "dei", "delle", "del", "secondo", "secondo", "tre", "due",
+    "quattro", "cinque", "sei", "dieci", "questo", "questa", "nessuna", "nessun",
+    "dopo", "prima", "oggi", "ieri", "tuttavia", "inoltre", "the", "a", "in",
+}
+
+
+def _claim_keys(claim: str) -> set[str]:
+    """Entità del claim: nomi propri (maiuscole) e numeri. Usate per il filtro
+    di pertinenza delle evidenze."""
+    keys: set[str] = set()
+    for m in re.finditer(r"\b[A-ZÀ-Ý][\wà-ý']+", claim):
+        w = m.group().lower()
+        if w not in _KEY_STOPWORDS and len(w) > 2:
+            keys.add(w)
+    for m in re.finditer(r"\d+(?:[.,]\d+)?", claim):
+        keys.add(m.group())
+    return keys
+
+
+def _is_relevant(ev: Evidence, keys: set[str]) -> bool:
+    """Pertinente se titolo+testo contengono almeno un'entità del claim.
+    Senza entità estraibili il filtro non si applica."""
+    if not keys:
+        return True
+    text = f"{ev.title} {ev.content}".lower()
+    return any(k in text or k.replace(",", ".") in text for k in keys)
 
 
 def _is_thin(content: str) -> bool:
@@ -168,41 +200,51 @@ async def gather_evidence(claim: str, registry: SourceRegistry) -> list[Evidence
     Query mirate generate da un agente (incluso inglese per claim internazionali).
     Blacklist sempre esclusa. raw_content Tavily, Firecrawl come rinforzo."""
     sq = await _generate_queries(claim)
+    keys = _claim_keys(claim)
 
     evidences: list[Evidence] = []
     fc_seen: set[str] = set()
     for q in [claim, *sq.queries]:
         for ev in await _factcheck_search(q):
-            if ev.url and ev.url not in fc_seen:
+            if ev.url and ev.url not in fc_seen and _is_relevant(ev, keys):
                 fc_seen.add(ev.url)
                 evidences.append(ev)
         if evidences:
             break  # primo match tier 0 basta, niente chiamate ridondanti
 
-    results: list[dict] = []
-    for q in sq.queries:
-        results += await _tavily_search(q, registry.trusted_domains(), news=sq.is_current)
-    if not results:
-        for q in sq.queries:
-            results += await _tavily_search(q, None, news=sq.is_current)
-            if results:
-                break
-
     seen_urls = {e.url for e in evidences}
-    for r in results:
-        url = r.get("url", "")
-        if not url or url in seen_urls or registry.is_blacklisted(url):
-            continue
-        seen_urls.add(url)
-        content = r.get("raw_content") or r.get("content") or ""
-        evidences.append(
-            Evidence(
+
+    def _collect(results: list[dict]) -> list[Evidence]:
+        """Risultati Tavily → Evidence pertinenti (dedup, blacklist, filtro entità)."""
+        out: list[Evidence] = []
+        for r in results:
+            url = r.get("url", "")
+            if not url or url in seen_urls or registry.is_blacklisted(url):
+                continue
+            seen_urls.add(url)
+            content = r.get("raw_content") or r.get("content") or ""
+            ev = Evidence(
                 url=url,
                 title=r.get("title", ""),
                 content=content[:6000],
                 tier=registry.tier_of(url),
             )
+            if _is_relevant(ev, keys):
+                out.append(ev)
+        return out
+
+    for q in sq.queries:
+        evidences += _collect(
+            await _tavily_search(q, registry.trusted_domains(), news=sq.is_current)
         )
+
+    # i domini fidati non hanno dato evidenze PERTINENTI (non solo zero risultati:
+    # Tavily riempie sempre con rumore) → si apre la ricerca a tutto il web
+    if len(evidences) < 2:
+        for q in sq.queries:
+            evidences += _collect(await _tavily_search(q, None, news=sq.is_current))
+            if len(evidences) >= 2:
+                break
 
     # Firecrawl dove Tavily non ha dato contenuto utilizzabile (corto o paywall)
     thin = [e for e in evidences if e.tier > 0 and _is_thin(e.content)]
