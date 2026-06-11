@@ -98,6 +98,29 @@ def test_claim_keys_extraction():
     assert "la" not in keys
 
 
+def test_relevance_word_boundary_no_substring():
+    from bot.agents.researcher import _is_relevant
+    from bot.models import Evidence
+
+    # 'conti' NON deve matchare 'continued', 'ros' NON deve matchare 'prosecutors'
+    noise = Evidence(url="https://x.com", content="Prosecutors continued the investigation in Seoul.")
+    assert _is_relevant(noise, {"conti", "ros"}) is False
+
+    good = Evidence(url="https://y.it", content="Il Ros ha indagato; la Corte dei Conti ha deciso.")
+    assert _is_relevant(good, {"conti", "ros"}) is True
+
+
+def test_relevance_requires_two_hits_with_many_keys():
+    from bot.agents.researcher import _is_relevant
+    from bot.models import Evidence
+
+    keys = {"procura", "roma", "ponte", "stretto", "messina"}
+    one_hit = Evidence(url="https://z.com", content="AS Roma won the match yesterday.")
+    assert _is_relevant(one_hit, keys) is False
+    two_hits = Evidence(url="https://w.it", content="Il ponte sullo stretto approvato.")
+    assert _is_relevant(two_hits, keys) is True
+
+
 async def test_query_generation_fallback_on_error():
     from bot.agents.researcher import _generate_queries
 

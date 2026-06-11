@@ -69,12 +69,20 @@ def _claim_keys(claim: str) -> set[str]:
 
 
 def _is_relevant(ev: Evidence, keys: set[str]) -> bool:
-    """Pertinente se titolo+testo contengono almeno un'entità del claim.
+    """Pertinente se titolo+testo contengono le entità del claim come PAROLE
+    INTERE (no sottostringhe: 'conti' non deve matchare 'continued', 'ros'
+    non deve matchare 'prosecutors'). Con 2+ entità ne servono almeno 2.
     Senza entità estraibili il filtro non si applica."""
     if not keys:
         return True
     text = f"{ev.title} {ev.content}".lower()
-    return any(k in text or k.replace(",", ".") in text for k in keys)
+    hits = sum(
+        1
+        for k in keys
+        if re.search(rf"\b{re.escape(k)}\b", text)
+        or re.search(rf"\b{re.escape(k.replace(',', '.'))}\b", text)
+    )
+    return hits >= min(2, len(keys))
 
 
 def _is_thin(content: str) -> bool:
