@@ -25,6 +25,7 @@ Giudizio complessivo: La notizia appare sostanzialmente confermata:
 - [Come funziona](#come-funziona)
 - [Anti-allucinazione: il cuore del progetto](#anti-allucinazione-il-cuore-del-progetto)
 - [La ricerca delle evidenze](#la-ricerca-delle-evidenze)
+- [Wiki delle verifiche](#wiki-delle-verifiche)
 - [Setup](#setup)
 - [Uso](#uso)
 - [Struttura del progetto](#struttura-del-progetto)
@@ -123,6 +124,22 @@ Per ogni claim, in ordine:
 
 La gerarchia si modifica in `sources.yaml` senza toccare il codice. Due fonti tier 1 concordi su domini diversi → confidenza alta; una fonte sola → bassa.
 
+## Wiki delle verifiche
+
+Ogni verifica genera automaticamente una pagina markdown nella cartella `wiki/` — un archivio consultabile di tutti i fact-check fatti:
+
+```
+wiki/
+  INDEX.md                                      # tabella: data | verifica | esito | tipo
+  2026/
+    2026-06-11-3-post-instagram-di-thegen....md # una pagina per verifica
+```
+
+- **`INDEX.md`**: tutte le verifiche, più recenti in alto, con l'esito a colpo d'occhio (`✅4 ❌0 ⚠️1`).
+- **Pagina per verifica**: ogni claim con verdetto, motivazione e fonti cliccabili.
+- L'indice viene rigenerato dal database a ogni verifica; la scrittura è best-effort (un errore sulla wiki non blocca mai la risposta del bot).
+- Cartella configurabile con `WIKI_DIR` nel `.env`. Suggerimento: aprila con Obsidian — diventa una piccola knowledge base navigabile delle bufale verificate.
+
 ## Setup
 
 ### Prerequisiti
@@ -171,6 +188,7 @@ Note operative:
 - **Cache**: lo stesso URL verificato meno di 7 giorni fa → risposta immediata dall'archivio SQLite (`factcheck.db`), zero costi.
 - Ogni report chiude col conteggio token LLM (chiamate DeepSeek; OCR e Whisper sono fatturati a parte da OpenAI).
 - Le query generate per ogni claim finiscono nel log a livello INFO — utile per capire perché un claim non trova evidenze.
+- Ogni verifica finisce anche nella [wiki markdown](#wiki-delle-verifiche) (`wiki/INDEX.md`).
 
 ## Struttura del progetto
 
@@ -184,6 +202,7 @@ bot/
   validation.py      # validazione meccanica citazioni + calcolo confidenza
   sources.py         # caricamento sources.yaml, lookup tier
   usage.py           # conteggio token per verifica (ContextVar)
+  wiki.py            # pagine markdown delle verifiche + INDEX.md
   agents/
     extractor.py     # testo → claim atomici (agno + DeepSeek)
     researcher.py    # claim → evidenze (query gen, FactCheck API, Tavily,
@@ -198,8 +217,9 @@ bot/
     media.py         # helper comune: audio → Whisper
 db/
   models.py          # SQLite: tabelle checks e claims, cache
-tests/               # 52 test, tutti offline (API e LLM mockati)
+tests/               # 57 test, tutti offline (API e LLM mockati)
 sources.yaml         # gerarchia fonti a tier + blacklist
+wiki/                # archivio markdown delle verifiche (generato)
 ```
 
 ## Test
