@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS claims (
     claim_text TEXT NOT NULL,
     verdict TEXT NOT NULL,
     confidence TEXT NOT NULL,
-    sources TEXT NOT NULL DEFAULT '[]'
+    sources TEXT NOT NULL DEFAULT '[]',
+    unv_reason TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -29,6 +30,12 @@ class Database:
         self._path = path
         with self._conn() as c:
             c.executescript(_SCHEMA)
+            try:
+                c.execute(
+                    "ALTER TABLE claims ADD COLUMN unv_reason TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass  # colonna già presente (DB nuovo o già migrato)
 
     def _conn(self) -> sqlite3.Connection:
         return sqlite3.connect(self._path)
@@ -48,9 +55,17 @@ class Database:
             )
             check_id = cur.lastrowid
             c.executemany(
-                "INSERT INTO claims (check_id, claim_text, verdict, confidence, sources) VALUES (?,?,?,?,?)",
+                "INSERT INTO claims (check_id, claim_text, verdict, confidence, sources, unv_reason) "
+                "VALUES (?,?,?,?,?,?)",
                 [
-                    (check_id, r.claim, r.verdict, r.confidence, json.dumps(r.sources))
+                    (
+                        check_id,
+                        r.claim,
+                        r.verdict,
+                        r.confidence,
+                        json.dumps(r.sources),
+                        r.unv_reason,
+                    )
                     for r in results
                 ],
             )
@@ -84,6 +99,16 @@ class Database:
             "true_n", "false_n", "unv_n",
         ]
         return [dict(zip(keys, r)) for r in rows]
+
+    def unverifiable_stats(self) -> dict[str, int]:
+        """Conteggio dei claim unverifiable per motivo tecnico: dice se il bot
+        è 'timido' per colpa del retrieval, delle quote o di veri buchi."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT COALESCE(NULLIF(unv_reason, ''), 'sconosciuto'), COUNT(*) "
+                "FROM claims WHERE verdict = 'unverifiable' GROUP BY 1"
+            ).fetchall()
+        return dict(rows)
 
     def get_recent_check(self, input_ref: str, days: int = 7) -> str | None:
         with self._conn() as c:

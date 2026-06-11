@@ -53,6 +53,22 @@ def test_rebuild_index(tmp_path):
     assert text.index("Post B") < text.index("Claim A")  # più recente in alto
 
 
+def test_index_unverifiable_stats_section(tmp_path):
+    rebuild_index(str(tmp_path), [], {"nessuna_evidenza": 3, "declassato_quote": 1})
+    text = (tmp_path / "INDEX.md").read_text(encoding="utf-8")
+    assert "Perché i claim escono non verificabili" in text
+    assert "nessuna evidenza pertinente trovata | 3" in text
+
+
+def test_page_shows_unv_reason(tmp_path):
+    results = [
+        ClaimResult(claim="X", verdict="unverifiable", confidence="low",
+                    sources=[], reasoning="", unv_reason="declassato_quote")
+    ]
+    path = write_page(str(tmp_path), 1, "2026-06-11 15:00:00", "T", "text", "text:x", results)
+    assert "citazioni non validate" in path.read_text(encoding="utf-8")
+
+
 def test_publish_never_raises(tmp_path):
     # wiki_dir non scrivibile (file al posto di directory) → None, nessuna eccezione
     blocker = tmp_path / "blocked"

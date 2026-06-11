@@ -146,5 +146,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             input_ref,
             results,
             db.list_checks_summary(),
+            db.unverifiable_stats(),
         )
     await msg.reply_text(report, disable_web_page_preview=True)

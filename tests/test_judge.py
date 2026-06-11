@@ -26,6 +26,7 @@ async def test_judge_no_evidence_short_circuit():
 
     result = await judge_claim("claim", [])
     assert result.verdict == "unverifiable"
+    assert result.unv_reason == "nessuna_evidenza"
 
 
 async def test_judge_failure_unverifiable():
@@ -75,3 +76,4 @@ async def test_judge_downgrade_note_when_retry_fails():
         result = await judge_claim("Il PIL è calato", EVS)
     assert result.verdict == "unverifiable"
     assert "declassato" in result.reasoning
+    assert result.unv_reason == "declassato_quote"

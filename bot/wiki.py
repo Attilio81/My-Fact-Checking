@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 
 _ICON = {"true": "✅ VERO", "false": "❌ FALSO", "unverifiable": "⚠️ NON VERIFICABILE"}
 _CONF = {"high": "alta", "medium": "media", "low": "bassa"}
+_UNV_LABEL = {
+    "nessuna_evidenza": "nessuna evidenza pertinente trovata",
+    "evidenze_insufficienti": "evidenze trovate ma insufficienti per decidere",
+    "declassato_quote": "verdetto declassato: citazioni non validate",
+    "errore_giudizio": "errore tecnico del giudice",
+    "sconosciuto": "motivo non registrato (verifica precedente alla telemetria)",
+}
 
 
 def _slug(title: str, max_len: int = 50) -> str:
@@ -58,6 +65,8 @@ def write_page(
         lines += [header, "", f"> {r.claim}", ""]
         if r.reasoning:
             lines += [r.reasoning, ""]
+        if r.verdict == "unverifiable" and r.unv_reason:
+            lines += [f"_Motivo: {_UNV_LABEL.get(r.unv_reason, r.unv_reason)}_", ""]
         if r.sources:
             lines.append("Fonti:")
             lines += [f"- <{url}>" for url in r.sources]
@@ -67,11 +76,14 @@ def write_page(
     return path
 
 
-def rebuild_index(wiki_dir: str, summaries: list[dict]) -> None:
+def rebuild_index(
+    wiki_dir: str, summaries: list[dict], unv_stats: dict[str, int] | None = None
+) -> None:
     """Rigenera INDEX.md dall'archivio (più recente in alto).
 
     summaries: [{id, created_at, input_type, input_ref, source_title,
                  true_n, false_n, unv_n}]
+    unv_stats: conteggio claim unverifiable per motivo tecnico.
     """
     lines = [
         "# Wiki delle verifiche",
@@ -91,6 +103,23 @@ def rebuild_index(wiki_dir: str, summaries: list[dict]) -> None:
             f"| {s['created_at'][:10]} | [{title}]({rel_str}) | {esito} | {s['input_type']} |"
         )
     lines.append("")
+
+    if unv_stats:
+        total_unv = sum(unv_stats.values())
+        lines += [
+            "## Perché i claim escono non verificabili",
+            "",
+            f"{total_unv} claim non verificabili in archivio. "
+            "I motivi tecnici (retrieval, citazioni) sono i falsi negativi da abbattere; "
+            "le evidenze insufficienti su aneddoti sono esiti corretti.",
+            "",
+            "| Motivo | Claim |",
+            "|---|---|",
+        ]
+        for reason, n in sorted(unv_stats.items(), key=lambda kv: -kv[1]):
+            lines.append(f"| {_UNV_LABEL.get(reason, reason)} | {n} |")
+        lines.append("")
+
     Path(wiki_dir, "INDEX.md").write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -103,13 +132,14 @@ def publish(
     input_ref: str,
     results: list[ClaimResult],
     summaries: list[dict],
+    unv_stats: dict[str, int] | None = None,
 ) -> Path | None:
     """Pagina + indice. Best-effort: logga e ritorna None su errore."""
     try:
         path = write_page(
             wiki_dir, check_id, created_at, title, input_type, input_ref, results
         )
-        rebuild_index(wiki_dir, summaries)
+        rebuild_index(wiki_dir, summaries, unv_stats)
         return path
     except Exception as e:
         logger.error(f"Scrittura wiki fallita per check {check_id}: {e}")

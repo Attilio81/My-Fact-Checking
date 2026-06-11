@@ -41,6 +41,15 @@ class JudgeOutput(BaseModel):
     reasoning: str = ""
 
 
+UnvReason = Literal[
+    "",  # verdetto non unverifiable
+    "nessuna_evidenza",  # il researcher non ha trovato nulla di pertinente
+    "evidenze_insufficienti",  # evidenze trovate ma il judge non ha potuto decidere
+    "declassato_quote",  # verdetto true/false perso: citazioni non validate
+    "errore_giudizio",  # errore tecnico (API, output non valido)
+]
+
+
 class ClaimResult(BaseModel):
     """Risultato finale per claim, dopo validazione meccanica."""
 
@@ -49,3 +58,4 @@ class ClaimResult(BaseModel):
     confidence: Confidence
     sources: list[str] = Field(default_factory=list)
     reasoning: str = ""
+    unv_reason: UnvReason = ""  # telemetria: perché un claim è uscito unverifiable

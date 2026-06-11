@@ -55,9 +55,14 @@ _DOWNGRADE_NOTE = (
 )
 
 
-def _unverifiable(claim: str, reasoning: str) -> ClaimResult:
+def _unverifiable(claim: str, reasoning: str, reason: str) -> ClaimResult:
     return ClaimResult(
-        claim=claim, verdict="unverifiable", confidence="low", sources=[], reasoning=reasoning
+        claim=claim,
+        verdict="unverifiable",
+        confidence="low",
+        sources=[],
+        reasoning=reasoning,
+        unv_reason=reason,
     )
 
 
@@ -78,7 +83,7 @@ async def judge_claim(claim: str, evidences: list[Evidence]) -> ClaimResult:
     Se le quote falliscono la validazione, un retry con feedback; se fallisce
     anche quello, declassa e lo dichiara nel reasoning."""
     if not evidences:
-        return _unverifiable(claim, "Nessuna evidenza trovata.")
+        return _unverifiable(claim, "Nessuna evidenza trovata.", "nessuna_evidenza")
 
     payload = json.dumps(
         {
@@ -93,7 +98,7 @@ async def judge_claim(claim: str, evidences: list[Evidence]) -> ClaimResult:
 
     judge_out = await _arun_judge(payload)
     if judge_out is None:
-        return _unverifiable(claim, "Errore durante il giudizio.")
+        return _unverifiable(claim, "Errore durante il giudizio.", "errore_giudizio")
 
     validated = validate_judge_output(judge_out, evidences)
 
@@ -119,6 +124,10 @@ async def judge_claim(claim: str, evidences: list[Evidence]) -> ClaimResult:
     if downgraded:
         validated.reasoning += _DOWNGRADE_NOTE
 
+    unv_reason = ""
+    if validated.verdict == "unverifiable":
+        unv_reason = "declassato_quote" if downgraded else "evidenze_insufficienti"
+
     confidence = compute_confidence(validated.verdict, validated.valid_evidences)
     return ClaimResult(
         claim=claim,
@@ -126,4 +135,5 @@ async def judge_claim(claim: str, evidences: list[Evidence]) -> ClaimResult:
         confidence=confidence,
         sources=[q.url for q in validated.valid_quotes],
         reasoning=validated.reasoning,
+        unv_reason=unv_reason,
     )
