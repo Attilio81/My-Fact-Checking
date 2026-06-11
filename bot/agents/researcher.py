@@ -17,16 +17,40 @@ logger = logging.getLogger(__name__)
 _QUERY_PROMPT = """Sei un generatore di query di ricerca per il fact-checking di un claim.
 
 Genera 2-3 query brevi e mirate per trovare evidenze sul claim, seguendo queste regole:
-- Parole chiave essenziali, NON la frase intera del claim.
+- Parole chiave essenziali, NON la frase intera del claim. Includi sempre i nomi
+  propri delle entità (persone, enti, luoghi: "Ponte Stretto Procura Roma indagine").
 - Angolazioni diverse: dato ufficiale/statistica, notizia, eventuale smentita.
-- Se il claim riguarda fatti internazionali o di un paese non italiano (USA, mondo),
-  almeno una query DEVE essere in INGLESE: le fonti primarie sono in inglese.
+- LINGUA: per fatti italiani domestici (procure, ministeri, politica interna,
+  cronaca italiana) le query devono essere SOLO IN ITALIANO — query inglesi
+  pescano rumore estero. L'inglese va usato (almeno una query) SOLO per fatti
+  genuinamente internazionali: USA, guerre, aziende globali, scienza.
 - is_current = true se il claim riguarda eventi recenti o valori che cambiano
   (prezzi, tassi, guerre in corso, dichiarazioni di attualità); false per fatti
   storici o scientifici consolidati."""
 
 _MAX_RESULTS = 5
-_SCRAPE_TOP_N = 2  # Firecrawl solo sulle prime N evidenze (costo)
+_SCRAPE_TOP_N = 3  # Firecrawl solo sulle prime N evidenze magre (costo)
+
+# marker di paywall/cookie-wall: contenuto presente ma inutilizzabile
+_PAYWALL_MARKERS = (
+    "abbonati",
+    "abbonamento",
+    "accedi per leggere",
+    "registrati per leggere",
+    "contenuto riservato",
+    "consenso ai cookie",
+    "subscribe to read",
+    "sign in to read",
+    "create a free account",
+)
+
+
+def _is_thin(content: str) -> bool:
+    """Contenuto inutilizzabile: troppo corto, o testa piena di marker paywall."""
+    if len(content) < 500:
+        return True
+    head = content[:1200].lower()
+    return any(m in head for m in _PAYWALL_MARKERS)
 _FACTCHECK_URL = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
 
 _tavily: TavilyClient | None = None
@@ -180,8 +204,8 @@ async def gather_evidence(claim: str, registry: SourceRegistry) -> list[Evidence
             )
         )
 
-    # Firecrawl solo dove Tavily non ha dato contenuto pieno
-    thin = [e for e in evidences if e.tier > 0 and len(e.content) < 500]
+    # Firecrawl dove Tavily non ha dato contenuto utilizzabile (corto o paywall)
+    thin = [e for e in evidences if e.tier > 0 and _is_thin(e.content)]
     for ev in thin[:_SCRAPE_TOP_N]:
         full = await _scrape(ev.url)
         if full:

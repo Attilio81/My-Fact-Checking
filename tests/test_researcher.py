@@ -55,6 +55,26 @@ async def test_raw_content_preferred_and_dedup():
     assert evs[0].content == "contenuto pieno"
 
 
+async def test_paywall_triggers_scrape():
+    paywall = "Abbonati per leggere questo articolo. " * 20  # >500 char ma inutilizzabile
+    p1, p2, p3, _ = _patches([[_tavily_result("https://www.istat.it/a", content=paywall)], []])
+    with p1, p2, p3, patch(
+        "bot.agents.researcher._scrape", AsyncMock(return_value="articolo completo dopo scrape")
+    ):
+        from bot.agents.researcher import gather_evidence
+
+        evs = await gather_evidence("claim", REG)
+    assert evs[0].content == "articolo completo dopo scrape"
+
+
+def test_is_thin_detection():
+    from bot.agents.researcher import _is_thin
+
+    assert _is_thin("corto") is True
+    assert _is_thin("Abbonati per continuare a leggere. " + "x" * 600) is True
+    assert _is_thin("Testo di articolo vero e sostanzioso. " * 30) is False
+
+
 async def test_query_generation_fallback_on_error():
     from bot.agents.researcher import _generate_queries
 
