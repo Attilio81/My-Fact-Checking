@@ -1,6 +1,7 @@
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 
 from bot.models import Confidence, Evidence, EvidenceQuote, JudgeOutput, Verdict
 
@@ -19,6 +20,24 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^\w\s%]", "", text)).strip()
 
 
+_FUZZY_MIN_LEN = 20  # sotto questa lunghezza solo match esatto
+_FUZZY_RATIO = 0.85  # frazione contigua della quote che deve esistere nel testo
+
+
+def _quote_in_text(quote_norm: str, content_norm: str) -> bool:
+    """Match esatto, oppure fuzzy: almeno l'85% contiguo della quote presente
+    nel testo (tollera una parola saltata o punteggiatura diversa, non frasi
+    inventate)."""
+    if quote_norm in content_norm:
+        return True
+    if len(quote_norm) < _FUZZY_MIN_LEN:
+        return False
+    m = SequenceMatcher(None, quote_norm, content_norm, autojunk=False).find_longest_match(
+        0, len(quote_norm), 0, len(content_norm)
+    )
+    return m.size / len(quote_norm) >= _FUZZY_RATIO
+
+
 def validate_judge_output(judge: JudgeOutput, evidences: list[Evidence]) -> ValidatedVerdict:
     """Validazione meccanica: URL citati devono esistere tra le evidenze recuperate,
     le quote devono comparire nel testo dell'evidenza. Violazione → unverifiable."""
@@ -29,7 +48,7 @@ def validate_judge_output(judge: JudgeOutput, evidences: list[Evidence]) -> Vali
         ev = by_url.get(q.url)
         if ev is None:
             continue  # URL inventato
-        if _normalize(q.quote) not in _normalize(ev.content):
+        if not _quote_in_text(_normalize(q.quote), _normalize(ev.content)):
             continue  # citazione inventata
         valid_quotes.append(q)
         if ev not in valid_evidences:

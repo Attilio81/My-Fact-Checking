@@ -34,6 +34,20 @@ def test_quote_valida_normalizzata():
     assert result.valid_quotes[0].url == "https://www.istat.it/x"
 
 
+def test_quote_fuzzy_parola_mancante_accettata():
+    # quote lunga con una parola saltata: 85%+ contiguo presente → valida
+    j = _judge(quotes=[EvidenceQuote(url="https://www.istat.it/x", quote="Il PIL è cresciuto del 2% nel 2025.")])
+    evs = [Evidence(url="https://www.istat.it/x",
+                    content="Secondo i dati, il PIL è cresciuto del 2% nel 2025, confermando il trend.",
+                    tier=1)]
+    assert validate_judge_output(j, evs).verdict == "true"
+
+
+def test_quote_fuzzy_corta_richiede_esatto():
+    j = _judge(quotes=[EvidenceQuote(url="https://www.istat.it/x", quote="PIL giù 5%")])
+    assert validate_judge_output(j, EVIDENCES).verdict == "unverifiable"
+
+
 def test_verdetto_senza_evidenze_forzato_unverifiable():
     j = _judge(verdict="false", quotes=[])
     assert validate_judge_output(j, EVIDENCES).verdict == "unverifiable"

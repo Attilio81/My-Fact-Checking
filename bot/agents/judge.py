@@ -105,7 +105,8 @@ async def judge_claim(claim: str, evidences: list[Evidence]) -> ClaimResult:
             f"{payload}\n\nATTENZIONE: nel tentativo precedente queste citazioni "
             f"NON esistono letteralmente nei testi delle evidenze: {failed}. "
             "Ricopia le citazioni LETTERALMENTE dal testo dell'evidenza, nella "
-            "lingua originale, senza tradurre né parafrasare."
+            "lingua originale, senza tradurre né parafrasare. Il reasoning invece "
+            "resta SEMPRE in italiano."
         )
         retry_out = await _arun_judge(retry_payload)
         if retry_out is not None:
