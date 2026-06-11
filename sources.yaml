@@ -10,6 +10,8 @@ tier_1_primarie:
   - iss.it
   - bancaditalia.it
   - ansa.it
+  - agi.it
+  - adnkronos.com
   - reuters.com
   - apnews.com
   - governo.it
@@ -29,6 +31,10 @@ tier_2_stampa:
   - repubblica.it
   - ilsole24ore.com
   - ilpost.it
+  - tgcom24.mediaset.it
+  - ilfattoquotidiano.it
+  - lastampa.it
+  - ilmessaggero.it
   - bbc.com
   - theguardian.com
   - nytimes.com
