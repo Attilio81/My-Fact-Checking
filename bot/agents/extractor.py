@@ -25,6 +25,11 @@ Estrai le affermazioni fattuali verificabili (claim), seguendo queste regole:
   nell'affermazione implicita da verificare (es. "Le scie chimiche fanno male alla salute").
 - Se l'input è un testo breve con una sola affermazione, quel testo È il claim:
   riportalo ripulito, non scartarlo.
+- STORIE ANEDDOTICHE: se il testo racconta una vicenda da fonte unica non
+  identificabile (protagonisti anonimi, nessuna testata/istituzione/luogo preciso
+  citato), NON spezzarla in più claim: produci UN solo claim riassuntivo
+  ("Secondo il post, uno studente..."). Riserva claim separati ai fatti con
+  riferimenti pubblici verificabili (nomi, enti, cifre ufficiali).
 - Restituisci lista vuota SOLO se il testo non contiene nulla di fattualmente
   verificabile (es. puri saluti, opinioni personali, emozioni)."""
 

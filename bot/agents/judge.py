@@ -49,14 +49,32 @@ def _get_agent() -> Agent:
     return _agent
 
 
+_DOWNGRADE_NOTE = (
+    " (verdetto declassato: citazioni non riscontrate letteralmente nelle fonti)"
+)
+
+
 def _unverifiable(claim: str, reasoning: str) -> ClaimResult:
     return ClaimResult(
         claim=claim, verdict="unverifiable", confidence="low", sources=[], reasoning=reasoning
     )
 
 
+async def _arun_judge(payload: str) -> JudgeOutput | None:
+    try:
+        response = await _get_agent().arun(payload)
+        if isinstance(response.content, JudgeOutput):
+            return response.content
+        logger.warning(f"Judge output inatteso: {response.content!r}")
+    except Exception as e:
+        logger.error(f"Judge fallito: {e}")
+    return None
+
+
 async def judge_claim(claim: str, evidences: list[Evidence]) -> ClaimResult:
-    """Giudica un claim contro le evidenze. Verdetto sempre validato meccanicamente."""
+    """Giudica un claim contro le evidenze. Verdetto sempre validato meccanicamente.
+    Se le quote falliscono la validazione, un retry con feedback; se fallisce
+    anche quello, declassa e lo dichiara nel reasoning."""
     if not evidences:
         return _unverifiable(claim, "Nessuna evidenza trovata.")
 
@@ -71,15 +89,33 @@ async def judge_claim(claim: str, evidences: list[Evidence]) -> ClaimResult:
         ensure_ascii=False,
     )
 
-    try:
-        response = await _get_agent().arun(payload)
-        if not isinstance(response.content, JudgeOutput):
-            return _unverifiable(claim, "Output del giudice non valido.")
-    except Exception as e:
-        logger.error(f"Judge fallito per '{claim}': {e}")
+    judge_out = await _arun_judge(payload)
+    if judge_out is None:
         return _unverifiable(claim, "Errore durante il giudizio.")
 
-    validated = validate_judge_output(response.content, evidences)
+    validated = validate_judge_output(judge_out, evidences)
+
+    downgraded = judge_out.verdict in ("true", "false") and not validated.valid_quotes
+    if downgraded:
+        failed = json.dumps(
+            [{"url": q.url, "quote": q.quote} for q in judge_out.evidence_used],
+            ensure_ascii=False,
+        )
+        retry_payload = (
+            f"{payload}\n\nATTENZIONE: nel tentativo precedente queste citazioni "
+            f"NON esistono letteralmente nei testi delle evidenze: {failed}. "
+            "Ricopia le citazioni LETTERALMENTE dal testo dell'evidenza, nella "
+            "lingua originale, senza tradurre né parafrasare."
+        )
+        retry_out = await _arun_judge(retry_payload)
+        if retry_out is not None:
+            revalidated = validate_judge_output(retry_out, evidences)
+            if revalidated.valid_quotes:
+                validated = revalidated
+                downgraded = False
+    if downgraded:
+        validated.reasoning += _DOWNGRADE_NOTE
+
     confidence = compute_confidence(validated.verdict, validated.valid_evidences)
     return ClaimResult(
         claim=claim,

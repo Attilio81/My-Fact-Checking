@@ -35,3 +35,43 @@ async def test_judge_failure_unverifiable():
 
         result = await judge_claim("claim", EVS)
     assert result.verdict == "unverifiable"
+
+
+def _resp(judge_output):
+    return type("R", (), {"content": judge_output})()
+
+
+async def test_judge_retry_recovers_verdict():
+    bad = JudgeOutput(
+        verdict="false",
+        evidence_used=[EvidenceQuote(url="https://istat.it/a", quote="frase parafrasata")],
+        reasoning="confutato",
+    )
+    good = JudgeOutput(
+        verdict="false",
+        evidence_used=[EvidenceQuote(url="https://istat.it/a", quote="Il PIL è cresciuto del 2%")],
+        reasoning="confutato",
+    )
+    with patch("bot.agents.judge._get_agent") as ga:
+        ga.return_value.arun = AsyncMock(side_effect=[_resp(bad), _resp(good)])
+        from bot.agents.judge import judge_claim
+
+        result = await judge_claim("Il PIL è calato", EVS)
+    assert result.verdict == "false"
+    assert result.sources == ["https://istat.it/a"]
+    assert "declassato" not in result.reasoning
+
+
+async def test_judge_downgrade_note_when_retry_fails():
+    bad = JudgeOutput(
+        verdict="false",
+        evidence_used=[EvidenceQuote(url="https://istat.it/a", quote="frase inventata")],
+        reasoning="confutato",
+    )
+    with patch("bot.agents.judge._get_agent") as ga:
+        ga.return_value.arun = AsyncMock(side_effect=[_resp(bad), _resp(bad)])
+        from bot.agents.judge import judge_claim
+
+        result = await judge_claim("Il PIL è calato", EVS)
+    assert result.verdict == "unverifiable"
+    assert "declassato" in result.reasoning
