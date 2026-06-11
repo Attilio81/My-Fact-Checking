@@ -38,6 +38,24 @@ def _authorized(update: Update) -> bool:
     return user is not None and user.id == get_settings().AUTHORIZED_USER_ID
 
 
+_WELCOME = (
+    "👋 Ciao! Sono il tuo bot di fact-checking.\n\n"
+    "Inviami una notizia da verificare:\n"
+    "🔗 link a un articolo\n"
+    "📝 testo o claim incollato\n"
+    "📸 screenshot di un post social\n"
+    "▶️ link a un video YouTube\n\n"
+    "Estraggo le affermazioni verificabili, cerco evidenze sul web e ti rispondo "
+    "con un verdetto per ciascuna: ✅ vero, ❌ falso o ⚠️ non verificabile, con le fonti."
+)
+
+
+async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update) or update.message is None:
+        return
+    await update.message.reply_text(_WELCOME)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update) or update.message is None:
         return
