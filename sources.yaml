@@ -1,0 +1,25 @@
+tier_0_factcheckers:
+  - open.online
+  - pagellapolitica.it
+  - facta.news
+  - snopes.com
+  - factcheck.org
+tier_1_primarie:
+  - istat.it
+  - eurostat.ec.europa.eu
+  - iss.it
+  - bancaditalia.it
+  - ansa.it
+  - reuters.com
+  - apnews.com
+  - governo.it
+  - europa.eu
+tier_2_stampa:
+  - corriere.it
+  - repubblica.it
+  - ilsole24ore.com
+  - ilpost.it
+  - bbc.com
+  - theguardian.com
+  - nytimes.com
+blacklist: []
